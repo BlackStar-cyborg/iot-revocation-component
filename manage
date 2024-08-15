@@ -24,7 +24,7 @@ Usage:
 EOF
 }
 
-ZRT_NETWORK=ba-arminveres-23
+ZRT_NETWORK=siborg-thesis-2024
 
 cmd=$1
 option=$2
