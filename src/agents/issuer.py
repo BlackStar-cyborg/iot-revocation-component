@@ -174,6 +174,86 @@ class IssuerAgent(AriesAgent):
                                 device,
                                 reason,
                             )
+    async def handle_notify_vulnerability_v2(self, message):
+        """
+        Handle vulnerabilities presented to the maintainer/admin/issuer with batch revocation.
+        """
+        if self.log_level == LogLevel.INFO or self.log_level == LogLevel.DEBUG:
+            log_msg("Received vulnerability:")
+            log_json(message)
+
+        batch_revocations = []  # Collect all revocations here
+
+        # Go through each vulnerability
+        for vuln_notif in message:
+            vuln_db_name = vuln_notif["db_name"]
+            vulnerability = vuln_notif["vulnerability"]
+
+            # Go through each device in the database
+            for device, device_info in self.db_client.db_keys[vuln_db_name].items():
+                db_result = await self.db_client.query_key(vuln_db_name, device)
+                if self.log_level == LogLevel.DEBUG:
+                    log_json(db_result)
+                    log_json(vulnerability)
+
+                # Check each component for vulnerabilities
+                for component_key, component_value in db_result["components"].items():
+                    for vuln_component_key, vuln_component_value in vulnerability.items():
+                        if component_key == vuln_component_key:
+                            # If a vulnerability is found
+                            if vuln_component_value.items() <= component_value.items():
+                                self.log(
+                                    f"Found existing vulnerability for device {device} with component {vuln_component_value}"
+                                )
+                                reason = {
+                                    "reason": "vulnerability",
+                                    "component": {vuln_component_key: vuln_component_value},
+                                }
+                                # Instead of immediately revoking, add it to the batch
+                                batch_revocations.append({
+                                    "cred_ex_id": db_result["cred_ex_id"],
+                                    "db_name": vuln_db_name,
+                                    "node_name": device,
+                                    "reason": reason
+                                })
+
+        # Perform batch revocation
+        if batch_revocations:
+            await self.revoke_credentials_batch(batch_revocations)
+
+    async def revoke_credentials_batch(self, batch_revocations):
+        """
+        Perform batch revocation of credentials.
+        """
+        for revocation in batch_revocations:
+            try:
+                # Ensure connection is established for each node
+                if self.db_client.db_keys[revocation["db_name"]][revocation["node_name"]].get("connection_id") is None:
+                    await self.establish_connection(revocation["db_name"], revocation["node_name"])
+
+                await self.admin_POST(
+                    "/revocation/revoke",
+                    {
+                        "cred_ex_id": revocation["cred_ex_id"],
+                        "publish": True,
+                        "connection_id": self.db_client.db_keys[revocation["db_name"]][revocation["node_name"]]["connection_id"],
+                        "comment": json.dumps(revocation["reason"]),
+                    },
+                )
+                log_time_to_file(
+                    "revocation", f"REVOCATION: time: {time.time_ns()}, node: {revocation['node_name']}\n"
+                )
+
+                # Update the database after successful revocation
+                response = await self.db_client.query_key(revocation["db_name"], revocation["node_name"])
+                response["cred_ex_id"] = ""
+                response["valid"] = False
+                await self.db_client.record_key(revocation["db_name"], revocation["node_name"], response)
+
+            except KeyError as e:
+                log_status(f"ERROR: Key {e} not found, device assumed to be offline")
+                continue  # Skip to the next revocation in case of error
+
 
     async def handle_node_updated(self, message):
         """
@@ -227,6 +307,7 @@ class IssuerAgent(AriesAgent):
         node_name: str,
         revocation_reason: dict,
     ):
+        print(db_name)
         """
         Revoke a credentials and publish it.
         """
@@ -580,6 +661,7 @@ async def main():
                 await agent_container.agent.mass_onboard()
 
             elif option == "5":
+                print(DB_NAME)
                 log_json(
                     [
                         await agent_container.agent.db_client.query_key(DB_NAME, device)
