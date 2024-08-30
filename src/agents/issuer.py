@@ -2,6 +2,7 @@ import asyncio
 import json
 import sys
 from datetime import date
+from aiohttp import web
 import time
 
 from agents.agent_container import (
@@ -131,6 +132,21 @@ class IssuerAgent(AriesAgent):
                     f"/issue-credential-2.0/records/{cred_ex_id}/issue",
                     {"comment": f"Issuing credential, exchange {cred_ex_id}"},
                 )
+    async def handle_get_all_nodes(self):
+        try:
+            nodes = dict(self.db_client.db_keys[DB_NAME])
+            if nodes:
+                node_keys = list(nodes.keys())
+                print(f"node names: {node_keys}")
+                response = json.dumps({"node_keys": node_keys})
+                print(f"response json = {response}")
+                return response
+            else:
+                return web.json_response([], content_type='application/json') 
+        except Exception as e:
+            # Log the exception and re-raise it
+            log_msg(f"Exception occurred while getting all nodes in issuer: {str(e)}")
+            raise
 
     async def handle_notify_vulnerability(self, message):
         """
@@ -174,85 +190,80 @@ class IssuerAgent(AriesAgent):
                                 device,
                                 reason,
                             )
-    async def handle_notify_vulnerability_v2(self, message):
+
+    async def update_orion_batch(self, db_name, nodes):
         """
-        Handle vulnerabilities presented to the maintainer/admin/issuer with batch revocation.
+        Update the state of multiple nodes in the Orion database.
         """
-        if self.log_level == LogLevel.INFO or self.log_level == LogLevel.DEBUG:
-            log_msg("Received vulnerability:")
-            log_json(message)
+        # Create a list of update operations
+        updates = {
+        node_name: {"cred_ex_id": "", "valid": False} for node_name in nodes
+        }
+        print(f"updates key-value = {updates}")
 
-        batch_revocations = []  # Collect all revocations here
+        # Execute the batch update
+        if updates:
+            result = await self.db_client[db_name].record_batch_key(DB_NAME, updates)
+            log_msg(f"Batch update completed: {result.modified_count} documents updated.")
+        else:
+            log_msg("No updates to perform.")
 
-        # Go through each vulnerability
-        for vuln_notif in message:
-            vuln_db_name = vuln_notif["db_name"]
-            vulnerability = vuln_notif["vulnerability"]
 
-            # Go through each device in the database
-            for device, device_info in self.db_client.db_keys[vuln_db_name].items():
-                db_result = await self.db_client.query_key(vuln_db_name, device)
-                if self.log_level == LogLevel.DEBUG:
-                    log_json(db_result)
-                    log_json(vulnerability)
-
-                # Check each component for vulnerabilities
-                for component_key, component_value in db_result["components"].items():
-                    for vuln_component_key, vuln_component_value in vulnerability.items():
-                        if component_key == vuln_component_key:
-                            # If a vulnerability is found
-                            if vuln_component_value.items() <= component_value.items():
-                                self.log(
-                                    f"Found existing vulnerability for device {device} with component {vuln_component_value}"
-                                )
-                                reason = {
-                                    "reason": "vulnerability",
-                                    "component": {vuln_component_key: vuln_component_value},
-                                }
-                                # Instead of immediately revoking, add it to the batch
-                                batch_revocations.append({
-                                    "cred_ex_id": db_result["cred_ex_id"],
-                                    "db_name": vuln_db_name,
-                                    "node_name": device,
-                                    "reason": reason
-                                })
-
-        # Perform batch revocation
-        if batch_revocations:
-            await self.revoke_credentials_batch(batch_revocations)
-
-    async def revoke_credentials_batch(self, batch_revocations):
+    async def handle_notify_batch_revocation(self, revocations):
         """
-        Perform batch revocation of credentials.
+        Accumulate, process, and publish revocations in a single function.
         """
-        for revocation in batch_revocations:
+        if not revocations:
+            log_msg("No revocations to process.")
+            return
+        print(f"issuer reached, revocations: {revocations}")
+
+        if isinstance(revocations, str):
+            revocations = json.loads(revocations)
+
+        for node in revocations:
+            if self.db_client.db_keys[DB_NAME][node].get("connection_id") is None:
+                await self.establish_connection(DB_NAME, node)
+            print(f"Processing revocation for node: {node}")
+
+            # Query the database for the node's details
+            response = await self.db_client.query_key(DB_NAME, node)
+            cred_ex_id = response.get("cred_ex_id")
+            if not cred_ex_id:
+                log_status(f"Invalid or missing credential_id for node: {node}")
+                continue
+
+            revocation_payload = {
+                "cred_ex_id": response.get("cred_ex_id"),
+                "connection_id": self.db_client.db_keys[DB_NAME][node]["connection_id"],
+                "publish": False,  # Do not publish immediately
+                "comment": json.dumps("batch revocation by auditor")
+            }
+
             try:
-                # Ensure connection is established for each node
-                if self.db_client.db_keys[revocation["db_name"]][revocation["node_name"]].get("connection_id") is None:
-                    await self.establish_connection(revocation["db_name"], revocation["node_name"])
-
-                await self.admin_POST(
-                    "/revocation/revoke",
-                    {
-                        "cred_ex_id": revocation["cred_ex_id"],
-                        "publish": True,
-                        "connection_id": self.db_client.db_keys[revocation["db_name"]][revocation["node_name"]]["connection_id"],
-                        "comment": json.dumps(revocation["reason"]),
-                    },
-                )
+                # Perform the revocation
+                await self.admin_POST("/revocation/revoke", revocation_payload)
                 log_time_to_file(
-                    "revocation", f"REVOCATION: time: {time.time_ns()}, node: {revocation['node_name']}\n"
+                    "revocation", f"Batch REVOCATION: time: {time.time_ns()}, node: {node}\n"
                 )
 
-                # Update the database after successful revocation
-                response = await self.db_client.query_key(revocation["db_name"], revocation["node_name"])
-                response["cred_ex_id"] = ""
-                response["valid"] = False
-                await self.db_client.record_key(revocation["db_name"], revocation["node_name"], response)
+            except Exception as e:
+                log_status(f"ERROR: Revocation failed for {node}: {e}")
 
-            except KeyError as e:
-                log_status(f"ERROR: Key {e} not found, device assumed to be offline")
-                continue  # Skip to the next revocation in case of error
+        # Publish revocations as batch
+        try:
+            await self.admin_POST(
+                "/revocation/publish-revocations",
+                {}
+            )
+            log_msg("Successfully published batched revocations.")
+            await self.update_orion_batch(DB_NAME, revocations)
+            response = await self.db_client.query_key(DB_NAME, node)
+            print(f"response after CMDB update: {response}")
+            print("CMDB Update done.")
+        except Exception as e:
+            log_status(f"ERROR: Publishing batched revocations failed: {e}")
+    
 
 
     async def handle_node_updated(self, message):
@@ -454,6 +465,7 @@ class IssuerAgent(AriesAgent):
                     devices.append(device)
                     device = {}
         for node in devices:
+            print(f"DBNAME: {DB_NAME}, node: {node}")
             await self.onboard_node(DB_NAME, node["name"], node["did"])
 
     async def remove_device(self, node_name: str):

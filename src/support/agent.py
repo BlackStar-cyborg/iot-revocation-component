@@ -911,6 +911,7 @@ class DemoAgent:
         app.add_routes(
             [
                 web.post("/webhooks/topic/{topic}/", self._receive_webhook),
+                web.get("/webhooks/topic/{topic}/", self._receive_webhook),
                 # route for fetching proof request for connectionless requests
                 web.get(
                     "/webhooks/pres_req/{pres_req_id}/",
@@ -926,9 +927,27 @@ class DemoAgent:
 
     async def _receive_webhook(self, request: ClientRequest):
         topic = request.match_info["topic"].replace("-", "_")
-        payload = await request.json()
-        await self.handle_webhook(topic, payload, request.headers)
-        return web.Response(status=200)
+        
+        if request.method == "POST":
+            payload = await request.json()
+            try:
+                await self.handle_webhook(topic, payload, request.headers)
+                return web.Response(status=200)
+            except Exception as e:
+                log_msg(f"Error handling POST request for topic {topic}: {str(e)}")
+                return web.Response(status=500, text="Internal Server Error")
+        
+        elif request.method == "GET":
+            try:
+                response = await self.handle_get_webhook(topic, request.headers)
+                print(f"response in receive {response}")
+                return response
+            except Exception as e:
+                log_msg(f"Error handling GET request for topic {topic}: {str(e)}")
+                return web.Response(status=500, text="Internal Server Error")
+        
+        return web.Response(status=400, text="Bad Request: Invalid method")
+
 
     async def service_decorator(self):
         # add a service decorator
@@ -981,6 +1000,41 @@ class DemoAgent:
                     f"has no method {handler} "
                     f"to handle webhook on topic {topic}"
                 )
+
+    
+    async def handle_get_webhook(self, topic: str, headers: dict) -> ClientResponse:
+        if topic != "webhook":  # Avoid recursion
+            handler = f"handle_{topic}"
+            method = getattr(self, handler, None)
+            
+            if method:
+                EVENT_LOGGER.debug(
+                    "Agent called controller webhook: %s%s%s",
+                    handler,
+                    f"\nGET {self.webhook_url}/topic/{topic}/",
+                    (f" for wallet: {headers.get('x-wallet-id')}" if 'x-wallet-id' in headers else ""),
+                )
+                
+                # Create a task and run it asynchronously
+                try:
+                    response = await method()
+                    print(f"response in agent {response}")
+                    
+                    return web.json_response(response)
+                
+                except Exception as e:
+                    log_msg(f"Exception occurred while handling GET webhook: {str(e)}")
+                    return web.json_response({"error": "Internal Server Error"}, status=500)
+                
+            else:
+                log_msg(
+                    f"Error: agent {self.ident} "
+                    f"has no method {handler} "
+                    f"to handle GET webhook on topic {topic}"
+                )
+                return web.json_response({"error": "Handler Method Not Found"}, status=404)
+        
+        return web.json_response({"error": "Invalid topic or method"}, status=400)
 
     async def handle_problem_report(self, message):
         self.log(
@@ -1416,6 +1470,7 @@ class DemoAgent:
         # =========================================================================================
         # Send invitation
         # =========================================================================================
+        print(f"node url: {node_url}")
         response = await self.client_session.post(
             url=f"{node_url}/connections/receive-invitation",
             json=invite,

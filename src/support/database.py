@@ -50,19 +50,17 @@ class OrionDB:
         return: value of database entry as dict
         """
         # More info under: https://labs.hyperledger.org/orion-server/docs/getting-started/transactions/curl/datatx#12-checking-the-existance-of-key1
-
         # keys need to be send as base64, in order for =/- characters to work.
         # WARN: (aver) watch out if padding = is used, then the request does not work anymore
         enc_key = base64.urlsafe_b64encode(bytes(key, encoding="utf-8")).decode().replace("=", "")
 
         payload = {"user_id": self.__username, "db_name": db_name, "key": key}
         signature = self.__sign_tx(payload)
-
+        # print(f"key: {key}, enc_key: {enc_key}, payload: {payload}, signature: {signature}, url: {self.__orion_db_url}")
         response = await self.__client_session.get(
             url=f"{self.__orion_db_url}/data/db1/{enc_key}",
             headers={"UserID": self.__username, "Signature": signature},
         )
-
         if not response.ok:
             log_msg("\n\nERRROR HAPPENED\n\n")
             log_msg(f"Returned with {response.status}")
@@ -71,7 +69,6 @@ class OrionDB:
         response = await response.json()
         if self.log_level == LogLevel.DEBUG:
             log_json(response)
-
         enc_value = response["response"].get("value")
         if enc_value is None:
             return None
@@ -298,6 +295,68 @@ class OrionDB:
             response = await response.json()
             log_status("\n\nERRROR HAPPENED\n\n")
             log_json(response)
+    
+    async def record_batch_keys(self, db_name: str, key_value_dict: dict):
+        """
+        Record or update multiple keys in a batch operation. 
+        This function overwrites the existing keys with the provided values.
+        """
+        headers = {"TxTimeout": "2s"}
+        
+        # Prepare the data_writes array with multiple key-value pairs
+        data_writes = [
+            {
+                "key": key_name,
+                "value": encode_data(value),
+                "acl": {
+                    "read_users": {"auditor": True},
+                    "read_write_users": {self.__username: True},
+                },
+            }
+            for key_name, value in key_value_dict.items()
+        ]
+        log_msg(f"data prepared for update: {data_writes}")
+
+        # Prepare the payload
+        payload = {
+            "must_sign_user_ids": [self.__username],
+            "tx_id": get_tx_id(),
+            "db_operations": [
+                {
+                    "db_name": db_name,
+                    "data_writes": data_writes,
+                }
+            ],
+        }
+        log_msg(f"payload: {payload}")
+        signature = self.__sign_tx(payload)
+        data = {"payload": payload, "signatures": {self.__username: signature}}
+        log_msg(f"database API: signature {signature} and data = {data}")
+        response = await self.__client_session.post(
+            url=f"{self.__orion_db_url}/data/tx", json=data, headers=headers
+        )
+
+        if response.ok:
+            status = response.status
+            response = await response.json()
+            if self.log_level == LogLevel.DEBUG:
+                log_msg(f"Returned with {status}")
+                log_json(response)
+            
+            # Update local keys map with batch data
+            for key_name, value in key_value_dict.items():
+                if key_name not in self.db_keys[db_name]:
+                    self.db_keys[db_name][key_name] = {}
+                self.db_keys[db_name][key_name].update(value)
+            
+            if self.log_level == LogLevel.DEBUG:
+                log_status("ORION: Added batch keys to local map")
+                log_json(self.db_keys[db_name])
+        else:
+            response = await response.json()
+            log_status("\n\nERROR HAPPENED\n\n")
+            log_json(response)
+
 
     async def query_all(self, db_name: str):
         """
@@ -389,7 +448,6 @@ def sign_transaction(data: json, privatekey: str):
         privatekey: location to private key
     """
     prepped_data = json.dumps(data).replace(" ", "")
-    # log_msg("Data to be signed:", prepped_data)
     signature = run_executable(
         (
             "./bin/signer",

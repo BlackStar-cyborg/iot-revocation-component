@@ -77,6 +77,7 @@ class NodeAgent(AriesAgent):
         """
         Demonstrative method to provide update to node.
         """
+        print("reached update request")
         UPDATER_URL = os.getenv("UPDATER_URL") or f"http://{DEFAULT_EXTERNAL_HOST}:8080/"
         async with self.client_session.get(UPDATER_URL) as resp:
             # we are overwriting the existing file as update

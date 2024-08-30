@@ -1,6 +1,7 @@
 # FIXME: (aver) create local folder to run from, not from root!
 
-FROM python:3.9-slim-bookworm
+ARG from_image=ghcr.io/hyperledger/aries-cloudagent-python:py3.9-0.10.4
+FROM ${from_image}
 LABEL maintainer="Armin Veres"
 
 # get golang
@@ -13,6 +14,8 @@ SHELL ["bash", "-c"]
 ADD ./requirements.docker.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install --no-cache-dir pyyaml
+
+USER root
 
 RUN apt-get update && apt-get install --yes --no-install-recommends \
     make \
@@ -31,7 +34,7 @@ RUN git clone --depth 1 https://github.com/hyperledger-labs/orion-server.git && 
     export PATH=$PATH:/usr/local/go/bin && \
     pushd orion-server && \
     make binary && \
-    cp -r bin/* /bin && \
+    cp -r bin ../ && \
     popd && \
     rm -r orion-server && \
     go clean -modcache

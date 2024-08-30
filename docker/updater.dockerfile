@@ -1,6 +1,7 @@
 # FIXME: (aver) create local folder to run from, not from root!
 
-FROM python:3.9-slim-bookworm
+ARG from_image=ghcr.io/hyperledger/aries-cloudagent-python:py3.9-0.10.4
+FROM ${from_image}
 LABEL maintainer="Armin Veres"
 
 ADD ./requirements.docker.txt ./requirements.txt

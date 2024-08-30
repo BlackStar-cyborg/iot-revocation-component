@@ -10,6 +10,8 @@ mkdir -p logs .agent_cache
 for ((i = START_PORT; i < END_PORT; i += 10)); do
 	(
 		echo "Running node: $i"
+		echo "Node name: $NAME_PREFIX$i"
 		./run --background --type node --port $i --name "$NAME_PREFIX$i" &>./logs/"$NAME_PREFIX$1"
+		echo "initialization started"
 	) &
 done
