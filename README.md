@@ -3,6 +3,8 @@
 This framework was developed as part of a bachelor thesis at the University of Zürich, ath the
 Communication Systems Group (CSG), under supervision from Daria Schumm and Thomas Grübl.
 
+This repository builds upon the framework of Armin Veres: https://github.com/arminveres/iot-inventory-management.git
+
 ## Abstract
 
 The Internet of Things (IoT) has significantly impacted various fields, integrating deeply into daily and industrial processes. However, the heterogeneous nature of IoT devices presents substantial security challenges, making them vulnerable to attacks. Identity and Access Management (IAM) is crucial for securing IoT environments by regulating access and privileges. A key component of IAM is credential revocation, which removes permissions from compromised credentials to prevent unauthorized access and mitigate risks. While Decentralized Ledger Technology (DLT) offers a transparent and reliable solution for credential management, existing blockchain-based revocation methods struggle with scalability and performance issues. 
