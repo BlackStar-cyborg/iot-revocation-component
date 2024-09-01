@@ -1,4 +1,4 @@
-# Bachelor Thesis: Inventorying and Secure life-cycles of IoT Devices
+# Bachelor Thesis: Design and Prototype of a Blockchain-Based Credential Revocation for IoT Device Lifecycle Management
 
 This framework was developed as part of a bachelor thesis at the University of Zürich, ath the
 Communication Systems Group (CSG), under supervision from Dr. Bruno Rodrigues and Katharina O. E.
@@ -10,28 +10,13 @@ Hyperledger Orion.
 
 ## Abstract
 
-The daily increase in deployed Internet of Things (IoT) devices and the advent of 5th-generation networking technology
-has led to a massive surge in information exchange.
-Enhanced connectivity and the adoption of IoT trigger cyber attacks, which are increasingly sophisticated and affect
-many IoT-related infrastructures, raising security concerns.
+This Bachelor thesis is dedicated to advancing lifecycle management of IoT device management by integrating blockchain-based credential revocation. The primary goal was to create a revocation mechanism that addresses the limitations found in related work, including immediate revocation, selective revocation, real-time availability, consistency of revocation status in the network, and scalable processing of revocation requests. The system integrates Decentralized Identifiers (DIDs) and blockchain-based mechanisms for efficient credential management, utilizing Docker for containerization and Hyperledger technologies for decentralized identity and revocation.
 
-While research and frameworks for managing IoT lifecycles exist, they often share a common drawback: centralization,
-_i.e._, a centralized point of failure can prove fatal from a security viewpoint.
-Few studies have looked into deploying decentralization and distributed ledger technology (DLT) for managing IoT lifecycles.
+The implementation demonstrated that the system generally met its objectives, successfully maintaining device identifiers and ensuring consistency between the CMDB and ledger. It effectively processed revocation actions and maintained real-time availability of revocation status. However, challenges were identified, particularly concerning the scalability of the revocation process, resource management, and real-time synchronization.
 
-This thesis provides a feasibility check for developing a lifecycle and identity-managing framework for IoT devices,
-boasting decentralization and modularity and enabling decentralized information sharing.
+The framework's limitations include complex management due to Docker's resource demands, inefficient port management, and constraints in adapting revocation mechanisms within the Hyperledger landscape. Notably, the system faces risks of delays and overhead in revocation processing, suggesting potential improvements through batching or parallel processing.
 
-First, we extensively researched concepts, frameworks, and tools that could enable the decentralization of identity and
-lifecycle management for IoT devices.
-Subsequently, we designed a framework that covers all the aforementioned specified requirements.
-We then implemented the design and evaluated it against security and performance concerns.
-
-The proposed framework utilizes a mixture of Hyperledger Aries for decentral identity management and Hyperledger Orion
-for centralized but DLT-based information sharing. The performance evaluation was promising, indicating only a linear
-increase with increasing nodes.
-This combination allows a well-rounded and moderate interaction between IoT devices, ensuring security and access
-control and providing opportunity for future extension.
+Future work involves addressing these limitations by exploring alternative revocation mechanisms, optimizing resource allocation, and enhancing interoperability with other blockchain technologies. The thesis contributes to advancing secure and scalable IoT credential management, offering practical solutions for real-world applications and setting the stage for further research and development in this domain.
 
 <!-- ## Challenges -->
 
