@@ -336,7 +336,7 @@ class IssuerAgent(AriesAgent):
         # currently aiohttp tries for an indefinite time and as soon as it could connect it updates
         # the device!
         try:
-            await self.admin_POST(
+            response = await self.admin_POST(
                 "/revocation/revoke",
                 {
                     "cred_ex_id": cred_ex_id,
@@ -348,6 +348,7 @@ class IssuerAgent(AriesAgent):
             log_time_to_file(
                 "revocation", f"REVOCATION: time: {time.time_ns()}, node: {node_name}\n"
             )
+            log_msg(f"Revocation for {node_name} with response: {response}")
             # update database with removed credential id, only after successful revocation
             response["cred_ex_id"] = ""
             response["valid"] = False

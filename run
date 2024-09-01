@@ -155,6 +155,7 @@ else
 		"-p 0.0.0.0:$PORTRANGE:$PORTRANGE"
 		"-v ./.agent_cache/:/home/aries/.agent_cache/"
 		"--memory 250m"
+		"cpus=1"
 	)
 	ARIES_FLAGS=(
 		"--wallet-type askar"
