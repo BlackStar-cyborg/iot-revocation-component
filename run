@@ -154,6 +154,7 @@ else
 		"-e POSTGRES=1"
 		"-p 0.0.0.0:$PORTRANGE:$PORTRANGE"
 		"-v ./.agent_cache/:/home/aries/.agent_cache/"
+		"--memory 250m"
 	)
 	ARIES_FLAGS=(
 		"--wallet-type askar"

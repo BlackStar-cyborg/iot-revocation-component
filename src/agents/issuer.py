@@ -457,8 +457,10 @@ class IssuerAgent(AriesAgent):
         """
         devices = []
         device = {}
-        with open(".agent_cache/mass_onboarding", mode="r", encoding="utf-8") as file:
+        with open("/home/aries/.agent_cache/mass_onboarding", mode="r", encoding="utf-8") as file:
             for line in file:
+                if not line or ": " not in line:
+                    continue
                 key, value = line.strip().split(": ")
                 device[key] = value
                 if key == "did":
@@ -673,7 +675,6 @@ async def main():
                 await agent_container.agent.mass_onboard()
 
             elif option == "5":
-                print(DB_NAME)
                 log_json(
                     [
                         await agent_container.agent.db_client.query_key(DB_NAME, device)

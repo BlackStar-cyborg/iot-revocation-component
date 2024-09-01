@@ -50,7 +50,6 @@ class Auditor:
         log_msg(f"Returned with {response.status}")
     
     async def notify_maintainer_batch(self, revocation_batch):
-        print(f"revocation_batch")
         response = await self.client_session.post(
             url=f"http://{DEFAULT_INTERNAL_HOST}:8002/webhooks/topic/notify_batch_revocation/",
             json=revocation_batch,
@@ -104,7 +103,6 @@ class Auditor:
     async def get_all_nodes_and_process_concurrently(self, db_to_check):
         # Get all nodes from the database
         all_nodes = await self.get_all_nodes(db_to_check)
-        print(f"{all_nodes}")
 
         # Process all nodes concurrently
         await asyncio.gather(*(self.process_node(node, db_to_check) for node in all_nodes))
@@ -117,7 +115,7 @@ async def main():
     db_to_check = "db1"
     auditor.db_client.db_keys[db_to_check] = {}
     nodes = auditor.db_client.db_keys[db_to_check]
-    async for action in prompt_loop("Enter node names (comma-separated) or type 'all' or 'allCon' to check all nodes: "):
+    async for action in prompt_loop("Enter node names (comma-separated) or type 'all' or 'concurrent' to check all nodes: "):
         if action is None or action.lower() == "exit":
             log_msg("Exiting...")
             break  # Exit the loop
@@ -128,7 +126,8 @@ async def main():
             all_nodes = await auditor.get_all_nodes(db_to_check)
             for node in all_nodes:
                 await auditor.process_node(node, db_to_check)
-        elif action.lower() == "allCon":
+
+        elif action.lower() == "concurrent":
             print("Trying to process all nodes concurrently")
             # Check all nodes
             all_nodes = await auditor.get_all_nodes_and_process_concurrently(db_to_check)

@@ -220,7 +220,7 @@ async def create_node_agent(args):
         with open(cache_path, "wb") as cache:
             cache.write(bytes(_agent.seed, "utf-8"))
     await agent_container.initialize(the_agent=_agent)
-    with open(".agent_cache/mass_onboarding", "ab") as cache:
+    with open("/home/aries/.agent_cache/mass_onboarding", "ab") as cache:
         output = f"name: {agent_container.ident}\ndid: {agent_container.agent.did}\n"
         cache.write(bytes(output, "utf-8"))
     return agent_container
